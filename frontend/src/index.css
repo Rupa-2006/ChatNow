@@ -1,0 +1,197 @@
+@import "tailwindcss";
+
+/* Enable class-based dark mode (`<html class="dark">`) in Tailwind CSS v4 */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ==========================================================================
+   ChatNow Design System Tokens
+   ========================================================================== */
+:root {
+  --bg-canvas: #f3f5f9;
+  --bg-surface: #ffffff;
+  --bg-subtle: #f8fafc;
+  --bg-elevated: #ffffff;
+  --bg-hover: #f1f5f9;
+  --bg-active: #eef2ff;
+  --bg-input: #f8fafc;
+
+  --border-subtle: #e5e9f2;
+  --border-strong: #cbd5e1;
+
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+  --text-inverse: #ffffff;
+
+  --brand-50: #eef2ff;
+  --brand-100: #e0e7ff;
+  --brand-200: #c7d2fe;
+  --brand-500: #4f46e5;
+  --brand-600: #4338ca;
+  --brand-700: #3730a3;
+
+  --accent-cyan: #06b6d4;
+  --status-online: #10b981;
+  --status-read: #0ea5e9;
+  --status-warn: #f59e0b;
+  --status-danger: #e11d48;
+
+  --bubble-in-bg: #ffffff;
+  --bubble-in-border: #e5e9f2;
+  --bubble-out-from: #4f46e5;
+  --bubble-out-to: #4338ca;
+
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 10px 30px -10px rgba(15, 23, 42, 0.12);
+  --shadow-lg: 0 20px 50px -16px rgba(15, 23, 42, 0.18);
+
+  color-scheme: light;
+}
+
+.dark {
+  --bg-canvas: #090e17;
+  --bg-surface: #101726;
+  --bg-subtle: #141d2f;
+  --bg-elevated: #182338;
+  --bg-hover: #1a253b;
+  --bg-active: rgba(99, 102, 241, 0.16);
+  --bg-input: #0d1422;
+
+  --border-subtle: rgba(148, 163, 184, 0.14);
+  --border-strong: rgba(148, 163, 184, 0.28);
+
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #8b9bb4;
+  --text-inverse: #0f172a;
+
+  --brand-50: rgba(99, 102, 241, 0.14);
+  --brand-100: rgba(99, 102, 241, 0.22);
+  --brand-200: #a5b4fc;
+  --brand-500: #6366f1;
+  --brand-600: #4f46e5;
+  --brand-700: #818cf8;
+
+  --accent-cyan: #22d3ee;
+  --status-online: #34d399;
+  --status-read: #38bdf8;
+  --status-warn: #fbbf24;
+  --status-danger: #fb7185;
+
+  --bubble-in-bg: #172133;
+  --bubble-in-border: rgba(148, 163, 184, 0.14);
+  --bubble-out-from: #4f46e5;
+  --bubble-out-to: #3b82f6;
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.32);
+  --shadow-md: 0 12px 32px -8px rgba(0, 0, 0, 0.48);
+  --shadow-lg: 0 24px 60px -12px rgba(0, 0, 0, 0.65);
+
+  color-scheme: dark;
+}
+
+@theme inline {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --color-bg-canvas: var(--bg-canvas);
+  --color-bg-surface: var(--bg-surface);
+  --color-bg-subtle: var(--bg-subtle);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-bg-hover: var(--bg-hover);
+  --color-bg-active: var(--bg-active);
+  --color-bg-input: var(--bg-input);
+
+  --color-border-subtle: var(--border-subtle);
+  --color-border-strong: var(--border-strong);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-text-inverse: var(--text-inverse);
+
+  --color-brand-50: var(--brand-50);
+  --color-brand-100: var(--brand-100);
+  --color-brand-200: var(--brand-200);
+  --color-brand-500: var(--brand-500);
+  --color-brand-600: var(--brand-600);
+  --color-brand-700: var(--brand-700);
+
+  --color-accent-cyan: var(--accent-cyan);
+  --color-status-online: var(--status-online);
+  --color-status-read: var(--status-read);
+  --color-status-warn: var(--status-warn);
+  --color-status-danger: var(--status-danger);
+}
+
+/* Base defaults & accessibility */
+html,
+body,
+#root {
+  height: 100%;
+  font-family: var(--font-sans);
+}
+
+*:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 2px;
+}
+
+/* Refined thin scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.28);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.48);
+}
+
+/* Subtle chat wallpaper dot pattern */
+.chat-grid-bg {
+  background-image: radial-gradient(rgba(148, 163, 184, 0.18) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+.dark .chat-grid-bg {
+  background-image: radial-gradient(rgba(148, 163, 184, 0.09) 1px, transparent 1px);
+}
+
+/* Subtle shimmer animation for skeleton loaders */
+@keyframes chatnow-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(148, 163, 184, 0.12) 25%,
+    rgba(148, 163, 184, 0.24) 50%,
+    rgba(148, 163, 184, 0.12) 75%
+  );
+  background-size: 200% 100%;
+  animation: chatnow-shimmer 1.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-shimmer {
+    animation: none;
+  }
+}
