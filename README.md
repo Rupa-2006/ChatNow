@@ -201,4 +201,4 @@ Last verified 2026-11-19 on Windows 11 with Docker Desktop (WSL 2).
 | History visibility: members added or re-added to a group see only messages sent after they joined, across history, search, reply quotes, files, previews, unread counts and live events | **Verified** (8 integration tests + browser) |
 | Session kept alive past the 15-minute access-token lifetime; signing out one tab leaves the user's other sessions signed in | **Verified** (unit tests + audit log) |
 | Playwright end-to-end suite (`npm run test:e2e`) | **Not yet run** |
-| Cloud production deployment | Blueprints written (`render.yaml`, `vercel.json`, `docs/07-deployment.md`); **not yet deployed** |
+| Production configuration (`render.yaml`): single-origin Render service + Neon + Upstash, uploads in PostgreSQL | Render's exact build and start commands run locally against an empty database: migrations applied, site served under its CSP with no violations, sign-up, WebSocket, reload persistence and database-stored uploads **verified**; **not yet deployed** |

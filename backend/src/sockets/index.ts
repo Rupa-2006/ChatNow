@@ -24,6 +24,7 @@ import {
 import {
   getPresenceForUsers,
   isUserOnline,
+  PRESENCE_HEARTBEAT_MS,
   refreshSocketPresence,
   registerSocketPresence,
   unregisterSocketPresence,
@@ -57,7 +58,8 @@ type AckFn<T = undefined> = (
   res: { ok: true; data?: T } | { ok: false; error: { code: string; message: string } },
 ) => void;
 
-const HEARTBEAT_INTERVAL_MS = 30_000;
+// Presence heartbeat interval; paired with the presence TTL in presence.service.ts.
+const HEARTBEAT_INTERVAL_MS = PRESENCE_HEARTBEAT_MS;
 const OFFLINE_GRACE_MS = 5_000;
 const MAX_ABUSE_STRIKES = 5;
 

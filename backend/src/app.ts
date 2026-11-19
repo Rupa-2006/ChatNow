@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import path from 'node:path';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express, { type Express } from 'express';
@@ -6,6 +7,7 @@ import helmet from 'helmet';
 import { pinoHttp } from 'pino-http';
 import { env } from './config/env.js';
 import { logger } from './config/logger.js';
+import { mountFrontend } from './frontend.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { createLimiters } from './middleware/rateLimit.js';
 import { buildApiRouter } from './routes/index.js';
@@ -13,6 +15,8 @@ import { buildApiRouter } from './routes/index.js';
 export type AppOptions = {
   /** Tests that are not about rate limiting turn it off. Defaults to on. */
   rateLimit?: boolean;
+  /** Serve the built frontend from this directory. Defaults to FRONTEND_DIST. */
+  frontendDist?: string;
 };
 
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
@@ -59,18 +63,20 @@ export function createApp(options: AppOptions = {}): Express {
     }),
   );
 
-  // Secure headers. This server only ever returns JSON and files, so the Content
-  // Security Policy can forbid everything.
-  app.use(
-    helmet({
-      contentSecurityPolicy: {
-        useDefaults: false,
-        directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] },
-      },
-      crossOriginResourcePolicy: { policy: 'same-site' },
-      referrerPolicy: { policy: 'no-referrer' },
-    }),
-  );
+  // Secure headers. The API only ever returns JSON and files, so its Content Security
+  // Policy can forbid everything. When this process also serves the website
+  // (FRONTEND_DIST), the pages get their own policy in frontend.ts.
+  const apiHeaders = helmet({
+    contentSecurityPolicy: {
+      useDefaults: false,
+      directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] },
+    },
+    crossOriginResourcePolicy: { policy: 'same-site' },
+    referrerPolicy: { policy: 'no-referrer' },
+  });
+  const frontendDist = options.frontendDist ?? env.FRONTEND_DIST;
+  if (frontendDist) app.use('/api', apiHeaders);
+  else app.use(apiHeaders);
 
   // Only the listed origins may read responses, and only they may send the cookie.
   app.use(
@@ -88,6 +94,8 @@ export function createApp(options: AppOptions = {}): Express {
   app.use(cookieParser());
 
   app.use('/api', buildApiRouter(createLimiters(options.rateLimit ?? true)));
+
+  if (frontendDist) mountFrontend(app, path.resolve(frontendDist));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

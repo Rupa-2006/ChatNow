@@ -8,7 +8,13 @@ import { redis } from '../config/redis.js';
  */
 export const presenceKey = (userId: string) => `presence:sockets:${userId}`;
 
-const PRESENCE_TTL_SECONDS = 90;
+/**
+ * How long a user's presence set survives without a heartbeat. Two and a half
+ * heartbeat intervals, so one late or lost heartbeat never flips anyone offline, while
+ * sockets of a crashed instance still age out within a few minutes.
+ */
+export const PRESENCE_HEARTBEAT_MS = 60_000;
+const PRESENCE_TTL_SECONDS = 150;
 
 export async function registerSocketPresence(userId: string, socketId: string): Promise<{ becameOnline: boolean }> {
   const key = presenceKey(userId);
@@ -17,9 +23,18 @@ export async function registerSocketPresence(userId: string, socketId: string): 
   return { becameOnline: prevCount === 0 };
 }
 
+/**
+ * Heartbeat. Normally a single EXPIRE (one Redis command), because hosted Redis free
+ * tiers meter every command: the previous MULTI/SADD/EXPIRE/EXEC every 30 s cost about
+ * 350K commands a month for one tab left open, most of Upstash's 500K free allowance.
+ * Only if the key has vanished (e.g. Redis restarted) is the socket re-added.
+ */
 export async function refreshSocketPresence(userId: string, socketId: string): Promise<void> {
   const key = presenceKey(userId);
-  await redis.multi().sadd(key, socketId).expire(key, PRESENCE_TTL_SECONDS).exec();
+  const stillThere = await redis.expire(key, PRESENCE_TTL_SECONDS);
+  if (stillThere === 0) {
+    await redis.multi().sadd(key, socketId).expire(key, PRESENCE_TTL_SECONDS).exec();
+  }
 }
 
 export async function unregisterSocketPresence(userId: string, socketId: string): Promise<{ remaining: number }> {

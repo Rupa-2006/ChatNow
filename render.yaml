@@ -1,38 +1,61 @@
-# Render Blueprint for ChatNow Backend (WebSockets + REST API).
-# Connect your GitHub repository in Render Dashboard -> Blueprints and fill in the
-# secret values marked `sync: false` (Neon DATABASE_URL, Upstash REDIS_URL, JWT secret).
+# Render Blueprint for ChatNow: ONE web service serving the React app, the REST API and
+# Socket.IO from a single origin (https://<service>.onrender.com).
+#
+# Why one service: the refresh cookie stays first-party with SameSite=Strict. Splitting
+# the frontend onto another domain would make it a third-party cookie, which Safari,
+# Firefox and Brave block, so users would be signed out on every reload.
+#
+# Render dashboard -> New -> Blueprint -> pick this repository, then fill in the two
+# values marked `sync: false` (Neon DATABASE_URL, Upstash REDIS_URL).
+# Full walkthrough: docs/07-deployment.md
 
 services:
   - type: web
-    name: chatnow-api
+    name: chatnow
     runtime: node
-    rootDir: backend
     plan: free
-    buildCommand: npm ci && npx prisma generate && npm run build
-    startCommand: npm run start:prod
+    region: oregon
+    # Build both apps. --include=dev is required: NODE_ENV=production below would
+    # otherwise make npm skip TypeScript, Vite and the other build tools.
+    buildCommand: >-
+      cd frontend && npm ci --include=dev && npm run build &&
+      cd ../backend && npm ci --include=dev && npx prisma generate && npm run build
+    # Applies pending database migrations, then starts the server.
+    startCommand: cd backend && npm run start:prod
     healthCheckPath: /api/health
     envVars:
+      - key: NODE_VERSION
+        value: "24"
       - key: NODE_ENV
         value: production
       - key: INSTANCE_ID
-        value: render-api-1
+        value: render
+      # Serve the built React app from the API process (single origin).
+      - key: FRONTEND_DIST
+        value: ../frontend/dist
+      # Render's free filesystem is wiped on every restart and sleep, so keep uploaded
+      # files in PostgreSQL instead of on disk.
+      - key: STORAGE_DRIVER
+        value: database
+      # Render's load balancer is the one proxy in front of the app.
       - key: TRUST_PROXY
         value: "1"
       - key: COOKIE_SECURE
         value: "true"
-      - key: COOKIE_SAME_SITE
-        value: none
       - key: RATE_LIMIT_STORE
         value: redis
+      # One instance on the free plan, so cross-instance broadcasting is not needed;
+      # turning it off saves Upstash commands. The multi-instance setup is demonstrated
+      # with Docker Compose (api-1 + api-2).
       - key: REDIS_ADAPTER_ENABLED
-        value: "true"
+        value: "false"
       - key: LOG_LEVEL
         value: info
-      - key: DATABASE_URL
-        sync: false
-      - key: REDIS_URL
-        sync: false
-      - key: CORS_ORIGINS
-        sync: false
       - key: JWT_ACCESS_SECRET
         generateValue: true
+      # Neon: the DIRECT (non-pooled) connection string, including ?sslmode=require
+      - key: DATABASE_URL
+        sync: false
+      # Upstash: the TLS URL, rediss://default:<password>@<host>:6379
+      - key: REDIS_URL
+        sync: false

@@ -45,6 +45,16 @@ const schema = z.object({
 
   /** Directory on disk for uploaded attachments and avatars (outside any public webroot). */
   UPLOAD_DIR: z.string().min(1).default('uploads'),
+  /**
+   * Where uploaded file bytes are kept: `disk` (UPLOAD_DIR) or `database` (PostgreSQL),
+   * for hosts whose filesystem does not survive restarts. See storage.service.ts.
+   */
+  STORAGE_DRIVER: z.enum(['disk', 'database']).default('disk'),
+  /**
+   * Serve the built frontend from this directory (single-origin deployment). Unset in
+   * development and Docker Compose, where Vite or Nginx serve the frontend.
+   */
+  FRONTEND_DIST: z.string().trim().min(1).optional(),
 
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 });
@@ -64,9 +74,13 @@ export const env = {
   ...raw,
   isProduction: raw.NODE_ENV === 'production',
   isTest: raw.NODE_ENV === 'test',
-  corsOrigins: raw.CORS_ORIGINS.split(',')
-    .map((o) => o.trim())
-    .filter(Boolean),
+  corsOrigins: [
+    ...raw.CORS_ORIGINS.split(',')
+      .map((o) => o.trim())
+      .filter(Boolean),
+    // Render sets this to the service's own https:// URL; allow it without extra config.
+    ...(process.env.RENDER_EXTERNAL_URL ? [process.env.RENDER_EXTERNAL_URL.replace(/\/$/, '')] : []),
+  ] as string[], // mutable array type: the `as const` below would make it readonly, which cors rejects
   /** Defaults to secure cookies in production and plain cookies for http://localhost. */
   cookieSecure: raw.COOKIE_SECURE ? raw.COOKIE_SECURE === 'true' : raw.NODE_ENV === 'production',
   /** Enabled by default outside test runs so multi-instance Socket.IO works out of the box. */

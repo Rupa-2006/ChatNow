@@ -9,7 +9,7 @@ export { prisma, redis };
 /** Empties the test database and the test Redis database between tests. */
 export async function resetState(): Promise<void> {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "AuditLog", "Notification", "Attachment", "MessageReaction", "MessageReceipt", "Message", "ConversationMember", "Conversation", "UserBlock", "RefreshToken", "User" CASCADE',
+    'TRUNCATE TABLE "StoredFile", "AuditLog", "Notification", "Attachment", "MessageReaction", "MessageReceipt", "Message", "ConversationMember", "Conversation", "UserBlock", "RefreshToken", "User" CASCADE',
   );
   await redis.flushdb();
 }

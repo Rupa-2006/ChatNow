@@ -205,6 +205,16 @@ model Attachment {
   @@index([uploaderId])
 }
 
+/// File bytes, used when STORAGE_DRIVER=database (hosts without a persistent disk, such as
+/// Render's free tier). Keyed by the same random storage key the disk driver uses as a path.
+model StoredFile {
+  key       String   @id
+  data      Bytes
+  mimeType  String   @db.VarChar(127)
+  sizeBytes Int
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+}
+
 model Notification {
   id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId         String           @db.Uuid
