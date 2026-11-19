@@ -32,8 +32,19 @@ interface UiState {
 
 let toastCounter = 0;
 
+/**
+ * The details panel is a third column only at Tailwind's `xl` breakpoint (1280 px).
+ * Below that it is an overlay covering the chat, so it starts closed there instead
+ * of greeting phone, tablet and laptop users with an empty panel to dismiss.
+ */
+export function detailsPanelFitsAlongside(): boolean {
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    ? window.matchMedia('(min-width: 1280px)').matches
+    : true;
+}
+
 export const useUiStore = create<UiState>((set) => ({
-  rightPanelOpen: true,
+  rightPanelOpen: detailsPanelFitsAlongside(),
   sidebarTab: 'chats',
   mobilePane: 'sidebar',
   selectedUser: null,

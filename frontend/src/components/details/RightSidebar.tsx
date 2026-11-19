@@ -21,6 +21,7 @@ import { AttachmentItem } from '@/components/chat/AttachmentItem';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useDebounce } from '@/hooks/useDebounce';
 import {
   listConversationAttachments,
@@ -72,6 +73,7 @@ export function RightSidebar() {
   const [editingName, setEditingName] = useState(false);
   const [groupNameDraft, setGroupNameDraft] = useState('');
   const [showAddMember, setShowAddMember] = useState(false);
+  const [pendingRemoval, setPendingRemoval] = useState<{ userId: string; name: string } | null>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
   const activeConv = conversations.find((c) => c.id === activeConversationId) ?? null;
@@ -226,6 +228,7 @@ export function RightSidebar() {
                       type="text"
                       value={groupNameDraft}
                       onChange={(e) => setGroupNameDraft(e.target.value)}
+                      aria-label="New group name"
                       maxLength={80}
                       className="h-8 min-w-0 flex-1 rounded-lg border border-border-subtle bg-bg-surface px-2.5 text-xs text-text-primary focus:border-brand-500 focus:outline-none"
                       autoFocus
@@ -440,7 +443,7 @@ export function RightSidebar() {
                                 type="button"
                                 title="Remove member"
                                 aria-label={`Remove ${m.user.displayName}`}
-                                onClick={() => void removeGroupMember(activeConv.id, m.user.id)}
+                                onClick={() => setPendingRemoval({ userId: m.user.id, name: m.user.displayName })}
                                 className="rounded-md p-1 text-text-muted hover:bg-rose-500/10 hover:text-status-danger cursor-pointer"
                               >
                                 <UserMinus className="h-3.5 w-3.5" />
@@ -499,6 +502,25 @@ export function RightSidebar() {
           </div>
         </div>
       </aside>
+
+      <ConfirmDialog
+        open={pendingRemoval !== null}
+        title={`Remove ${pendingRemoval?.name ?? 'this member'}?`}
+        description="They will lose access to this group and its messages straight away. You can add them again later."
+        confirmLabel="Remove"
+        onConfirm={async () => {
+          if (!pendingRemoval || !activeConv) return;
+          try {
+            await removeGroupMember(activeConv.id, pendingRemoval.userId);
+            addToast({ title: `${pendingRemoval.name} was removed`, variant: 'success' });
+          } catch (err) {
+            addToast({ title: 'Could not remove member', description: normalizeApiError(err).message, variant: 'error' });
+          } finally {
+            setPendingRemoval(null);
+          }
+        }}
+        onCancel={() => setPendingRemoval(null)}
+      />
     </>
   );
 }

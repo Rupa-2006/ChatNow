@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Check, Users } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
@@ -18,6 +18,7 @@ interface NewGroupModalProps {
 
 export function NewGroupModal({ open, onClose }: NewGroupModalProps) {
   const directory = useUsersStore((s) => s.directory);
+  const loadDirectory = useUsersStore((s) => s.loadDirectory);
   const createGroupConversation = useChatStore((s) => s.createGroupConversation);
   const addToast = useUiStore((s) => s.addToast);
 
@@ -25,6 +26,12 @@ export function NewGroupModal({ open, onClose }: NewGroupModalProps) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+
+  // The directory is loaded once when the app starts; refresh it each time the dialog
+  // opens so people who signed up since then can be added to the group.
+  useEffect(() => {
+    if (open) void loadDirectory();
+  }, [open, loadDirectory]);
 
   const toggleMember = (id: string) => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));

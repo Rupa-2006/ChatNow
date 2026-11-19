@@ -105,5 +105,7 @@ describe('Auth pages', () => {
     await user.click(screen.getByRole('button', { name: /create account/i }));
 
     expect(await screen.findByText('Username is already taken')).toBeInTheDocument();
-  });
+    // Simulated typing of a full registration form, twice, is slow on a busy machine;
+    // the 5 s default made this test fail at random rather than on real regressions.
+  }, 20_000);
 });

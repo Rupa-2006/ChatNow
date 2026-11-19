@@ -188,13 +188,16 @@ Last verified 2026-11-19 on Windows 11 with Docker Desktop (WSL 2).
 | Criterion | Verification State |
 |---|---|
 | Backend: 107 unit + 46 integration tests against real PostgreSQL 17 and Redis 7 | **Passing (153/153)** |
-| Frontend: typecheck, production build, 14 component tests | **Passing** |
+| Frontend: typecheck, production build, 22 tests (components, auth flow, token renewal, confirmation dialog) | **Passing** |
 | Prisma migration on a real database, no schema drift | **Verified** |
 | Two users in a browser: register, login, instant messages, typing, online / last seen, delivered → read ticks, history after reload, mobile layout | **Verified manually** |
 | Full stack `--profile full`: migrate job, `api-1`, `api-2`, frontend and Nginx all healthy | **Verified** |
 | Cross-server chat through Nginx: Alice's socket on `api-1`, Bob's on `api-2`; messages and read receipts cross via Redis | **Verified manually** (and by `multi-instance.test.ts`) |
 | Failover: `api-1` stopped mid-chat, Alice's client reconnected to `api-2` automatically and messaging continued | **Verified manually** |
 | ELK: logs from both instances in Elasticsearch; Kibana saved searches import and display; canary passwords, cookies, tokens and message text absent from every stored log | **Verified** |
-| Group chats, file uploads, reactions, edit/delete in the browser | Covered by integration tests; **not yet exercised manually** |
+| Groups in the browser across three server instances: create, group messaging with group read receipts, OWNER / ADMIN / MEMBER controls, live promotion, rename by admin, add member, remove member (removed user immediately loses the chat and gets 404 on REST and empty search) | **Verified manually** |
+| Uploads in the browser: image sent and displayed on both sides from shared storage; rejected: HTML or SVG-with-script disguised as images, renamed executables, files over 10 MB, downloads by non-members; path-traversal filenames neutralised | **Verified manually** |
+| Reactions (add / remove), replies, edit within 15 minutes ("edited" label), delete with confirmation (text wiped in the database) | **Verified manually** |
+| Session kept alive past the 15-minute access-token lifetime; signing out one tab leaves the user's other sessions signed in | **Verified** (unit tests + audit log) |
 | Playwright end-to-end suite (`npm run test:e2e`) | **Not yet run** |
 | Cloud production deployment | Blueprints written (`render.yaml`, `vercel.json`, `docs/07-deployment.md`); **not yet deployed** |

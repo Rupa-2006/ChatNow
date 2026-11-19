@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import * as convApi from '@/services/conversations.api';
 import * as msgApi from '@/services/messages.api';
 import * as notifApi from '@/services/notifications.api';
+import { performSilentRefresh } from '@/services/http';
 import {
   connectSocket,
   disconnectSocket,
@@ -207,7 +208,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set({ connectionState: 'disconnected' });
     });
 
-    socket.on('session:revoked', (payload: { reason?: string }) => {
+    socket.on('session:revoked', async (payload: { reason?: string }) => {
+      // An expired access token is not a sign-out: the refresh cookie is usually still
+      // valid. Renew it and let Socket.IO reconnect with the new token (its `auth`
+      // callback reads the current one). Only end the session if renewal fails.
+      if (payload?.reason === 'token_expired') {
+        const renewed = await performSilentRefresh();
+        if (renewed) {
+          set({ connectionState: 'connecting' });
+          getSocket()?.connect();
+          return;
+        }
+      }
       disconnectSocket();
       useAuthStore.getState().clearSession();
       useUiStore.getState().addToast({

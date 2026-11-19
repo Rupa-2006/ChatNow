@@ -1,7 +1,8 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2, MessageSquare, ShieldCheck, UserCog, Users, WifiOff } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useAuthStore } from '@/store/authStore';
 import {
@@ -35,6 +36,7 @@ export function ChatWorkspace() {
   const toggleReaction = useChatStore((s) => s.toggleReaction);
   const retryMessage = useChatStore((s) => s.retryMessage);
   const markActiveConversationRead = useChatStore((s) => s.markActiveConversationRead);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   const rightPanelOpen = useUiStore((s) => s.rightPanelOpen);
   const toggleRightPanel = useUiStore((s) => s.toggleRightPanel);
@@ -146,6 +148,8 @@ export function ChatWorkspace() {
       await deleteMessage(msgId);
     } catch (err) {
       addToast({ title: 'Could not delete message', description: normalizeApiError(err).message, variant: 'error' });
+    } finally {
+      setPendingDeleteId(null);
     }
   };
 
@@ -213,7 +217,7 @@ export function ChatWorkspace() {
                   highlighted={highlightedMessageId === msg.id}
                   onReply={setReplyToMessage}
                   onEdit={setEditingMessage}
-                  onDelete={(m) => void handleDelete(m.id)}
+                  onDelete={(m) => setPendingDeleteId(m.id)}
                   onReact={(id, emoji) => void toggleReaction(id, emoji)}
                   onRetry={(cid) => void retryMessage(activeConv.id, cid)}
                 />
@@ -240,6 +244,15 @@ export function ChatWorkspace() {
         recipientName={title}
         disabled={isBlocked}
         disabledReason={isBlocked ? 'Unblock this user in the details panel to send messages.' : undefined}
+      />
+
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        title="Delete this message?"
+        description="It will be removed for everyone in this conversation. This cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={() => (pendingDeleteId ? handleDelete(pendingDeleteId) : undefined)}
+        onCancel={() => setPendingDeleteId(null)}
       />
     </section>
   );

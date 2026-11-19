@@ -14,13 +14,56 @@ let memoryAccessToken: string | null = null;
 let sessionExpiredListener: (() => void) | null = null;
 let tokenRefreshedListener: ((token: string) => void) | null = null;
 let inflightRefresh: Promise<string | null> | null = null;
+let proactiveRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Renew this long before the access token expires (plus jitter, see below). */
+export const REFRESH_LEAD_MS = 60_000;
 
 export function getAccessToken(): string | null {
   return memoryAccessToken;
 }
 
+/**
+ * Reads the `exp` claim (seconds since the epoch) without verifying the signature.
+ * That is safe here: the value only decides *when* to renew; the server still
+ * verifies every token it receives.
+ */
+export function readTokenExpiry(token: string): number | null {
+  try {
+    const payload = token.split('.')[1];
+    if (!payload) return null;
+    const json = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+    return typeof json.exp === 'number' ? json.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Renews the access token shortly before it expires. Without this, a user who only
+ * reads or chats over the WebSocket never triggers a REST 401, so the token was never
+ * renewed and the server ended their session after 15 minutes.
+ * The random jitter keeps several tabs of the same site from rotating the shared
+ * refresh cookie at the same instant.
+ */
+function scheduleProactiveRefresh(token: string | null): void {
+  if (proactiveRefreshTimer) clearTimeout(proactiveRefreshTimer);
+  proactiveRefreshTimer = null;
+  if (!token) return;
+
+  const expiresAt = readTokenExpiry(token);
+  if (!expiresAt) return;
+  const lead = REFRESH_LEAD_MS + Math.random() * 30_000;
+  const delay = Math.max(5_000, expiresAt - Date.now() - lead);
+  proactiveRefreshTimer = setTimeout(() => {
+    proactiveRefreshTimer = null;
+    void performSilentRefresh();
+  }, delay);
+}
+
 export function setAccessToken(token: string | null): void {
   memoryAccessToken = token;
+  scheduleProactiveRefresh(token);
 }
 
 export function onSessionExpired(listener: (() => void) | null): void {
@@ -33,8 +76,9 @@ export function onTokenRefreshed(listener: ((token: string) => void) | null): vo
 
 /**
  * Dedicated client without auth-retry interceptors, used exclusively for token refresh.
+ * Exported only so tests can substitute its network adapter.
  */
-const refreshClient = axios.create({
+export const refreshClient = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
