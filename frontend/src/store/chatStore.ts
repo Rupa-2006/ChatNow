@@ -379,15 +379,37 @@ export const useChatStore = create<ChatState>((set, get) => ({
       });
     });
 
-    socket.on('conversation:updated', (conv: Conversation) => {
-      get().updateConversationInStore(conv);
-    });
+    // Broadcast to every member, so it carries only shared group fields. Merge them;
+    // never take role, unread count, mute state or preview from it (those are per user).
+    socket.on(
+      'conversation:updated',
+      (shared: Pick<Conversation, 'id' | 'type' | 'name' | 'avatarUrl' | 'members'>) => {
+        set((s) => ({
+          conversations: s.conversations.map((c) =>
+            c.id === shared.id
+              ? { ...c, name: shared.name, avatarUrl: shared.avatarUrl, members: shared.members }
+              : c,
+          ),
+        }));
+      },
+    );
 
     socket.on('conversation:removed', ({ conversationId }: { conversationId: string }) => {
-      set((s) => ({
-        conversations: s.conversations.filter((c) => c.id !== conversationId),
-        activeConversationId: s.activeConversationId === conversationId ? null : s.activeConversationId,
-      }));
+      set((s) => {
+        // Drop the cached messages too: if this user is added back later, they must only
+        // see what the server returns for their new membership, not what is still in memory.
+        const without = <T,>(record: Record<string, T>) => {
+          const { [conversationId]: _dropped, ...rest } = record;
+          return rest;
+        };
+        return {
+          conversations: s.conversations.filter((c) => c.id !== conversationId),
+          activeConversationId: s.activeConversationId === conversationId ? null : s.activeConversationId,
+          messagesByConv: without(s.messagesByConv),
+          nextCursorByConv: without(s.nextCursorByConv),
+          typingByConv: without(s.typingByConv),
+        };
+      });
     });
 
     socket.on('member:added', ({ conversationId, member }: { conversationId: string; member: Member }) => {

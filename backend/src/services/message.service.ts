@@ -1,7 +1,7 @@
 import { Prisma, type ConversationType } from '@prisma/client';
 import { logger } from '../config/logger.js';
 import { prisma } from '../config/prisma.js';
-import { emitToConversation, emitToUser } from '../sockets/hub.js';
+import { emitToConversation, emitToConversationExcept, emitToUser } from '../sockets/hub.js';
 import { badRequest, forbidden, notFound } from '../utils/errors.js';
 import type { SendMessageInput } from '../validators/message.validators.js';
 import { audit, type ClientMeta } from './audit.service.js';
@@ -10,25 +10,64 @@ import {
   decodeTimestampCursor,
   encodeTimestampCursor,
   groupReactions,
+  isVisibleTo,
   messageInclude,
   toMessageDto,
   type MessageDto,
+  type MessageRowWithRelations,
 } from './mappers.js';
 import { createNotification } from './notification.service.js';
 import { escapeLike, isBlockedEitherWay } from './user.service.js';
 
 const EDIT_WINDOW_MS = 15 * 60 * 1000;
 
+/*
+ * History visibility: a member sees only messages created during their current
+ * membership (createdAt >= ConversationMember.joinedAt, which is reset on re-join).
+ * Everything that reads messages enforces it: history, search, reply quotes,
+ * reactions, edits, deletes, attachments, previews and unread counts.
+ */
+
+/** Requires an active membership AND that the message falls inside it; otherwise 404. */
+async function requireVisibleMessage(userId: string, message: { conversationId: string; createdAt: Date }) {
+  const membership = await requireActiveMembership(userId, message.conversationId);
+  if (!isVisibleTo(message.createdAt, membership.joinedAt)) throw notFound('Message');
+  return membership;
+}
+
+/**
+ * Broadcasts a message event to the conversation. A reply quotes its parent, so
+ * members who joined after the parent was sent receive a copy with the quote withheld
+ * instead of the shared payload.
+ */
+async function broadcastMessage(conversationId: string, event: string, row: MessageRowWithRelations): Promise<void> {
+  const dto = toMessageDto(row);
+  if (!row.replyTo) {
+    emitToConversation(conversationId, event, dto);
+    return;
+  }
+  const laterJoiners = await prisma.conversationMember.findMany({
+    where: { conversationId, leftAt: null, joinedAt: { gt: row.replyTo.createdAt } },
+    select: { userId: true, joinedAt: true },
+  });
+  if (laterJoiners.length === 0) {
+    emitToConversation(conversationId, event, dto);
+    return;
+  }
+  emitToConversationExcept(conversationId, laterJoiners.map((m) => m.userId), event, dto);
+  for (const m of laterJoiners) emitToUser(m.userId, event, toMessageDto(row, m.joinedAt));
+}
+
 export async function listMessages(
   userId: string,
   conversationId: string,
   opts: { limit: number; cursor?: string; around?: string },
 ): Promise<{ messages: MessageDto[]; nextCursor: string | null }> {
-  await requireActiveMembership(userId, conversationId);
+  const { joinedAt: since } = await requireActiveMembership(userId, conversationId);
 
   if (opts.around) {
     const target = await prisma.message.findFirst({
-      where: { id: opts.around, conversationId },
+      where: { id: opts.around, conversationId, createdAt: { gte: since } },
       select: { id: true, createdAt: true },
     });
     if (!target) throw notFound('Message');
@@ -38,6 +77,7 @@ export async function listMessages(
       prisma.message.findMany({
         where: {
           conversationId,
+          createdAt: { gte: since },
           OR: [
             { createdAt: { lt: target.createdAt } },
             { createdAt: target.createdAt, id: { lte: target.id } },
@@ -67,7 +107,7 @@ export async function listMessages(
     const combined = [...newer.reverse(), ...olderSlice];
     const oldest = olderSlice[olderSlice.length - 1];
     return {
-      messages: combined.map(toMessageDto),
+      messages: combined.map((m) => toMessageDto(m, since)),
       nextCursor: hasMoreOlder && oldest ? encodeTimestampCursor(oldest.createdAt, oldest.id) : null,
     };
   }
@@ -76,6 +116,7 @@ export async function listMessages(
   const rows = await prisma.message.findMany({
     where: {
       conversationId,
+      createdAt: { gte: since },
       ...(parsed
         ? {
             OR: [
@@ -93,7 +134,7 @@ export async function listMessages(
   const page = rows.slice(0, opts.limit);
   const last = page[page.length - 1];
   return {
-    messages: page.map(toMessageDto),
+    messages: page.map((m) => toMessageDto(m, since)),
     nextCursor: rows.length > opts.limit && last ? encodeTimestampCursor(last.createdAt, last.id) : null,
   };
 }
@@ -114,7 +155,7 @@ export async function sendMessage(
     if (existing.conversationId !== conversationId) {
       throw badRequest('clientId already used in another conversation');
     }
-    return { message: toMessageDto(existing), created: false };
+    return { message: toMessageDto(existing, membership.joinedAt), created: false };
   }
 
   // Load active members to verify block status (for DIRECT) and create receipts.
@@ -132,8 +173,9 @@ export async function sendMessage(
   }
 
   if (input.replyToId) {
+    // The sender may only quote a message they can see.
     const parent = await prisma.message.findFirst({
-      where: { id: input.replyToId, conversationId },
+      where: { id: input.replyToId, conversationId, createdAt: { gte: membership.joinedAt } },
       select: { id: true },
     });
     if (!parent) throw badRequest('Replied-to message does not belong to this conversation');
@@ -187,8 +229,8 @@ export async function sendMessage(
       });
     });
 
-    const dto = toMessageDto(created);
-    emitToConversation(conversationId, 'message:new', dto);
+    const dto = toMessageDto(created, membership.joinedAt);
+    await broadcastMessage(conversationId, 'message:new', created);
 
     // Log delivery metadata ONLY — never message content!
     logger.info({
@@ -234,7 +276,7 @@ export async function sendMessage(
         where: { senderId_clientId: { senderId: userId, clientId: input.clientId } },
         include: messageInclude,
       });
-      if (raced) return { message: toMessageDto(raced), created: false };
+      if (raced) return { message: toMessageDto(raced, membership.joinedAt), created: false };
     }
     throw err;
   }
@@ -251,7 +293,7 @@ export async function editMessage(
   });
   if (!existing) throw notFound('Message');
 
-  await requireActiveMembership(userId, existing.conversationId);
+  const membership = await requireVisibleMessage(userId, existing);
 
   if (existing.senderId !== userId) {
     throw forbidden('You can only edit your own messages');
@@ -269,9 +311,8 @@ export async function editMessage(
     include: messageInclude,
   });
 
-  const dto = toMessageDto(updated);
-  emitToConversation(existing.conversationId, 'message:updated', dto);
-  return dto;
+  await broadcastMessage(existing.conversationId, 'message:updated', updated);
+  return toMessageDto(updated, membership.joinedAt);
 }
 
 export async function deleteMessage(
@@ -281,11 +322,11 @@ export async function deleteMessage(
 ): Promise<{ conversationId: string; deletedAt: string }> {
   const existing = await prisma.message.findUnique({
     where: { id: messageId },
-    select: { id: true, conversationId: true, senderId: true, deletedAt: true },
+    select: { id: true, conversationId: true, senderId: true, deletedAt: true, createdAt: true },
   });
   if (!existing) throw notFound('Message');
 
-  const membership = await requireActiveMembership(userId, existing.conversationId);
+  const membership = await requireVisibleMessage(userId, existing);
 
   const isOwn = existing.senderId === userId;
   const isGroupModerator =
@@ -327,11 +368,11 @@ export async function deleteMessage(
 export async function addReaction(userId: string, messageId: string, emoji: string): Promise<MessageDto> {
   const existing = await prisma.message.findUnique({
     where: { id: messageId },
-    select: { id: true, conversationId: true, deletedAt: true },
+    select: { id: true, conversationId: true, deletedAt: true, createdAt: true },
   });
   if (!existing) throw notFound('Message');
 
-  await requireActiveMembership(userId, existing.conversationId);
+  const { joinedAt } = await requireVisibleMessage(userId, existing);
   if (existing.deletedAt) throw badRequest('Cannot react to a deleted message');
 
   await prisma.messageReaction.upsert({
@@ -344,7 +385,7 @@ export async function addReaction(userId: string, messageId: string, emoji: stri
     where: { id: messageId },
     include: messageInclude,
   });
-  const dto = toMessageDto(updated);
+  const dto = toMessageDto(updated, joinedAt);
   emitToConversation(existing.conversationId, 'message:reaction', {
     conversationId: existing.conversationId,
     messageId,
@@ -356,11 +397,11 @@ export async function addReaction(userId: string, messageId: string, emoji: stri
 export async function removeReaction(userId: string, messageId: string, emoji: string): Promise<MessageDto> {
   const existing = await prisma.message.findUnique({
     where: { id: messageId },
-    select: { id: true, conversationId: true },
+    select: { id: true, conversationId: true, createdAt: true },
   });
   if (!existing) throw notFound('Message');
 
-  await requireActiveMembership(userId, existing.conversationId);
+  const { joinedAt } = await requireVisibleMessage(userId, existing);
 
   await prisma.messageReaction.deleteMany({
     where: { messageId, userId, emoji },
@@ -370,7 +411,7 @@ export async function removeReaction(userId: string, messageId: string, emoji: s
     where: { id: messageId },
     include: messageInclude,
   });
-  const dto = toMessageDto(updated);
+  const dto = toMessageDto(updated, joinedAt);
   emitToConversation(existing.conversationId, 'message:reaction', {
     conversationId: existing.conversationId,
     messageId,
@@ -453,7 +494,7 @@ export async function searchConversationMessages(
   conversationId: string,
   opts: { q: string; limit: number; cursor?: string },
 ): Promise<{ messages: MessageDto[]; nextCursor: string | null }> {
-  await requireActiveMembership(userId, conversationId);
+  const { joinedAt: since } = await requireActiveMembership(userId, conversationId);
   const parsed = opts.cursor ? decodeTimestampCursor(opts.cursor) : null;
   const ilike = `%${escapeLike(opts.q)}%`;
 
@@ -465,6 +506,7 @@ export async function searchConversationMessages(
     SELECT m."id", m."createdAt"
     FROM "Message" m
     WHERE m."conversationId" = ${conversationId}::uuid
+      AND m."createdAt" >= ${since}
       AND m."deletedAt" IS NULL
       AND (
         to_tsvector('simple', m."content") @@ websearch_to_tsquery('simple', ${opts.q})
@@ -486,7 +528,7 @@ export async function searchConversationMessages(
   });
 
   return {
-    messages: rows.map(toMessageDto),
+    messages: rows.map((m) => toMessageDto(m, since)),
     nextCursor: ids.length > opts.limit && last ? encodeTimestampCursor(last.createdAt, last.id) : null,
   };
 }
@@ -506,7 +548,8 @@ export async function searchAllMessages(
     ? Prisma.sql`AND (m."createdAt", m."id") < (${parsed.createdAt}, ${parsed.id}::uuid)`
     : Prisma.empty;
 
-  // Authorization is built directly into the JOIN: only conversations where userId is an active member.
+  // Authorization is built directly into the JOIN: only conversations where userId is an
+  // active member, and only messages sent since that membership began.
   const ids = await prisma.$queryRaw<{ id: string; createdAt: Date }[]>(Prisma.sql`
     SELECT m."id", m."createdAt"
     FROM "Message" m
@@ -514,6 +557,7 @@ export async function searchAllMessages(
       ON cm."conversationId" = m."conversationId"
      AND cm."userId" = ${userId}::uuid
      AND cm."leftAt" IS NULL
+     AND m."createdAt" >= cm."joinedAt"
     WHERE m."deletedAt" IS NULL
       AND (
         to_tsvector('simple', m."content") @@ websearch_to_tsquery('simple', ${opts.q})
@@ -537,9 +581,18 @@ export async function searchAllMessages(
     },
   });
 
+  const joinedAtByConv = new Map(
+    (
+      await prisma.conversationMember.findMany({
+        where: { userId, leftAt: null, conversationId: { in: [...new Set(rows.map((r) => r.conversationId))] } },
+        select: { conversationId: true, joinedAt: true },
+      })
+    ).map((m) => [m.conversationId, m.joinedAt]),
+  );
+
   return {
     messages: rows.map((row) => ({
-      ...toMessageDto(row),
+      ...toMessageDto(row, joinedAtByConv.get(row.conversationId)),
       conversation: row.conversation,
     })),
     nextCursor: ids.length > opts.limit && last ? encodeTimestampCursor(last.createdAt, last.id) : null,

@@ -13,6 +13,7 @@ import { audit, type ClientMeta } from './audit.service.js';
 import {
   decodeTimestampCursor,
   encodeTimestampCursor,
+  isVisibleTo,
   messageInclude,
   toMessageDto,
   type MessageDto,
@@ -100,23 +101,35 @@ async function hydrateConversations(viewerId: string, rows: ConversationFullRow[
 
   // Compute unread counts per conversation for viewerId in one grouped query.
   const convIds = rows.map((r) => r.id);
+  // The viewer only sees messages from their current membership onwards (see
+  // message.service.ts), so previews and unread counts must ignore anything earlier.
+  const joinedAtByConv = new Map<string, Date>();
+  for (const conv of rows) {
+    const mine = conv.members.find((m) => m.userId === viewerId);
+    if (mine) joinedAtByConv.set(conv.id, mine.joinedAt);
+  }
+
   const unreadRows = await prisma.messageReceipt.findMany({
     where: {
       userId: viewerId,
       readAt: null,
       message: { conversationId: { in: convIds }, deletedAt: null },
     },
-    select: { message: { select: { conversationId: true } } },
+    select: { message: { select: { conversationId: true, createdAt: true } } },
   });
   const unreadByConv = new Map<string, number>();
   for (const r of unreadRows) {
     const cid = r.message.conversationId;
+    if (!isVisibleTo(r.message.createdAt, joinedAtByConv.get(cid))) continue;
     unreadByConv.set(cid, (unreadByConv.get(cid) ?? 0) + 1);
   }
 
   return rows.map((conv) => {
     const myMembership = conv.members.find((m) => m.userId === viewerId);
-    const lastMsg = conv.messages[0] ? toMessageDto(conv.messages[0]) : null;
+    const since = myMembership?.joinedAt;
+    // Only the newest message is loaded; if the viewer cannot see it, they cannot see any.
+    const newest = conv.messages[0];
+    const lastMsg = newest && isVisibleTo(newest.createdAt, since) ? toMessageDto(newest, since) : null;
     return {
       id: conv.id,
       type: conv.type,
@@ -140,9 +153,21 @@ async function hydrateConversations(viewerId: string, rows: ConversationFullRow[
       mutedUntil: myMembership?.mutedUntil?.toISOString() ?? null,
       myRole: myMembership?.role ?? 'MEMBER',
       createdAt: conv.createdAt.toISOString(),
-      lastMessageAt: conv.lastMessageAt?.toISOString() ?? null,
+      // Do not reveal when hidden activity happened: report the visible message's time.
+      lastMessageAt: lastMsg ? (conv.lastMessageAt?.toISOString() ?? null) : null,
     };
   });
+}
+
+/**
+ * Group fields that are the same for every member. `conversation:updated` is
+ * broadcast to the whole room, so it must not carry the actor's personal fields
+ * (role, unread count, mute state, last-message preview): recipients used to
+ * overwrite their own with them, e.g. a member appearing as ADMIN after an admin
+ * renamed the group.
+ */
+export function sharedConversationFields(conv: ConversationDto) {
+  return { id: conv.id, type: conv.type, name: conv.name, avatarUrl: conv.avatarUrl, members: conv.members };
 }
 
 export async function getConversationForViewer(viewerId: string, conversationId: string): Promise<ConversationDto> {
@@ -352,7 +377,7 @@ export async function updateConversation(
 
   const updated = await getConversationForViewer(userId, conversationId);
   if (input.name !== undefined) {
-    emitToConversation(conversationId, 'conversation:updated', updated);
+    emitToConversation(conversationId, 'conversation:updated', sharedConversationFields(updated));
   }
   return updated;
 }
@@ -385,7 +410,7 @@ export async function updateConversationAvatar(
   });
 
   const updated = await getConversationForViewer(userId, conversationId);
-  emitToConversation(conversationId, 'conversation:updated', updated);
+  emitToConversation(conversationId, 'conversation:updated', sharedConversationFields(updated));
   return updated;
 }
 
@@ -431,10 +456,14 @@ export async function addGroupMembers(
     });
     if (prev && prev.leftAt === null) continue;
     if (prev) {
-      await prisma.conversationMember.update({
-        where: { id: prev.id },
-        data: { leftAt: null, role: 'MEMBER', joinedAt: new Date() },
-      });
+      // joinedAt is the boundary of what this member may read, and message createdAt is
+      // stamped by PostgreSQL's clock, so stamp joinedAt with the same clock (now())
+      // rather than the API server's, which may drift.
+      await prisma.$executeRaw`
+        UPDATE "ConversationMember"
+        SET "leftAt" = NULL, "role" = 'MEMBER', "joinedAt" = now()
+        WHERE "id" = ${prev.id}::uuid
+      `;
     } else {
       await prisma.conversationMember.create({
         data: { conversationId, userId: targetId, role: 'MEMBER' },
@@ -650,7 +679,7 @@ export async function markConversationRead(
   const membership = await requireActiveMembership(userId, conversationId);
 
   const pivot = await prisma.message.findFirst({
-    where: { id: messageId, conversationId },
+    where: { id: messageId, conversationId, createdAt: { gte: membership.joinedAt } },
     select: { id: true, createdAt: true },
   });
   if (!pivot) throw notFound('Message');
@@ -749,12 +778,12 @@ export async function listConversationAttachments(
   conversationId: string,
   opts: { limit: number; cursor?: string },
 ): Promise<{ attachments: AttachmentDto[]; nextCursor: string | null }> {
-  await requireActiveMembership(userId, conversationId);
+  const { joinedAt: since } = await requireActiveMembership(userId, conversationId);
   const parsed = opts.cursor ? decodeTimestampCursor(opts.cursor) : null;
 
   const rows = await prisma.attachment.findMany({
     where: {
-      message: { conversationId, deletedAt: null },
+      message: { conversationId, deletedAt: null, createdAt: { gte: since } },
       ...(parsed
         ? {
             OR: [

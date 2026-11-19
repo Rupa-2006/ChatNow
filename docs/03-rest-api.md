@@ -181,6 +181,15 @@ NIST SP 800-63B).
 
 ## Messages
 
+**History visibility.** A member sees only messages sent during their current
+membership. Someone added to a group, or removed and added back, cannot read anything
+said before they (re)joined. This holds on every route: history (including `?around=`),
+both searches, reactions, mark-as-read and replies (all `404`/`400` for earlier
+messages), attachment download and shared media, and the conversation list's
+`lastMessage`, `lastMessageAt` and `unreadCount`. When a later message replies to an
+earlier one, viewers who joined afterwards receive `replyTo: { content: "", hidden: true }`
+instead of the quote.
+
 | Method | Path | Query / Body | Who | Success |
 |---|---|---|---|---|
 | GET | `/conversations/:id/messages` | `?limit&cursor` (newest first), or `?around=<messageId>` to jump to a search hit | member | `200 { data: Message[], meta }` |

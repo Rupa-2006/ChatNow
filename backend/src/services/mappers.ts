@@ -20,6 +20,8 @@ export type MessageDto = {
     senderId: string;
     content: string;
     deleted: boolean;
+    /** True when the quoted message predates the viewer joining; its content is withheld. */
+    hidden?: boolean;
   } | null;
   attachments: AttachmentDto[];
   reactions: ReactionGroupDto[];
@@ -31,7 +33,7 @@ export type MessageDto = {
 
 export const messageInclude = {
   replyTo: {
-    select: { id: true, senderId: true, content: true, deletedAt: true },
+    select: { id: true, senderId: true, content: true, deletedAt: true, createdAt: true },
   },
   attachments: {
     select: {
@@ -74,8 +76,22 @@ export function deriveMessageStatus(
   return 'sent';
 }
 
-export function toMessageDto(row: MessageRowWithRelations): MessageDto {
+/**
+ * True when a member who joined at `visibleSince` may see a message created at `createdAt`.
+ * Members see only what was sent during their current membership, so someone added
+ * (or re-added) to a group cannot read what was said before they joined.
+ */
+export function isVisibleTo(createdAt: Date, visibleSince: Date | undefined): boolean {
+  return !visibleSince || createdAt.getTime() >= visibleSince.getTime();
+}
+
+/**
+ * @param visibleSince the viewer's join time. A reply quoting a message from before
+ *   it is returned with the quote withheld (`hidden: true`, empty content).
+ */
+export function toMessageDto(row: MessageRowWithRelations, visibleSince?: Date): MessageDto {
   const isDeleted = row.deletedAt !== null;
+  const quoteHidden = row.replyTo ? !isVisibleTo(row.replyTo.createdAt, visibleSince) : false;
   return {
     id: row.id,
     conversationId: row.conversationId,
@@ -84,12 +100,14 @@ export function toMessageDto(row: MessageRowWithRelations): MessageDto {
     content: isDeleted ? '' : row.content,
     clientId: row.clientId,
     replyTo: row.replyTo
-      ? {
-          id: row.replyTo.id,
-          senderId: row.replyTo.senderId,
-          content: row.replyTo.deletedAt ? '' : row.replyTo.content,
-          deleted: row.replyTo.deletedAt !== null,
-        }
+      ? quoteHidden
+        ? { id: row.replyTo.id, senderId: row.replyTo.senderId, content: '', deleted: false, hidden: true }
+        : {
+            id: row.replyTo.id,
+            senderId: row.replyTo.senderId,
+            content: row.replyTo.deletedAt ? '' : row.replyTo.content,
+            deleted: row.replyTo.deletedAt !== null,
+          }
       : null,
     attachments: isDeleted ? [] : row.attachments.map(toAttachmentDto),
     reactions: isDeleted ? [] : groupReactions(row.reactions),

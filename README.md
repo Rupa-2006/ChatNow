@@ -198,6 +198,7 @@ Last verified 2026-11-19 on Windows 11 with Docker Desktop (WSL 2).
 | Groups in the browser across three server instances: create, group messaging with group read receipts, OWNER / ADMIN / MEMBER controls, live promotion, rename by admin, add member, remove member (removed user immediately loses the chat and gets 404 on REST and empty search) | **Verified manually** |
 | Uploads in the browser: image sent and displayed on both sides from shared storage; rejected: HTML or SVG-with-script disguised as images, renamed executables, files over 10 MB, downloads by non-members; path-traversal filenames neutralised | **Verified manually** |
 | Reactions (add / remove), replies, edit within 15 minutes ("edited" label), delete with confirmation (text wiped in the database) | **Verified manually** |
+| History visibility: members added or re-added to a group see only messages sent after they joined, across history, search, reply quotes, files, previews, unread counts and live events | **Verified** (8 integration tests + browser) |
 | Session kept alive past the 15-minute access-token lifetime; signing out one tab leaves the user's other sessions signed in | **Verified** (unit tests + audit log) |
 | Playwright end-to-end suite (`npm run test:e2e`) | **Not yet run** |
 | Cloud production deployment | Blueprints written (`render.yaml`, `vercel.json`, `docs/07-deployment.md`); **not yet deployed** |

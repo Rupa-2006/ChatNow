@@ -30,6 +30,23 @@ export function emitToConversation(conversationId: string, event: string, payloa
   getSocketServer()?.to(conversationRoom(conversationId)).emit(event, payload);
 }
 
+/**
+ * Broadcasts to a conversation room while skipping the given users' sockets (on every
+ * instance, via the Redis adapter). Used to send those users a redacted payload instead.
+ */
+export function emitToConversationExcept(
+  conversationId: string,
+  excludedUserIds: string[],
+  event: string,
+  payload: unknown,
+): void {
+  const io = getSocketServer();
+  if (!io) return;
+  io.to(conversationRoom(conversationId))
+    .except(excludedUserIds.map(userRoom))
+    .emit(event, payload);
+}
+
 export function emitToUser(userId: string, event: string, payload: unknown): void {
   getSocketServer()?.to(userRoom(userId)).emit(event, payload);
 }

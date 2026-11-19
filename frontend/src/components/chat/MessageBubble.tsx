@@ -105,7 +105,11 @@ export function MessageBubble({
               )}
             >
               <p className="truncate italic">
-                {message.replyTo.deleted ? 'Original message deleted' : message.replyTo.content || 'Attachment'}
+                {message.replyTo.hidden
+                  ? 'Replying to an earlier message'
+                  : message.replyTo.deleted
+                    ? 'Original message deleted'
+                    : message.replyTo.content || 'Attachment'}
               </p>
             </div>
           )}

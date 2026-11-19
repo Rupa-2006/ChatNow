@@ -74,13 +74,13 @@ Every payload is validated with the same Zod schemas as the REST endpoints, and
 
 | Event | Payload | Sent to |
 |---|---|---|
-| `message:new` | `Message` | `conversation:{id}` (including the sender's other tabs) |
+| `message:new` | `Message` | `conversation:{id}` (including the sender's other tabs). For a reply, members who joined after the quoted message are excluded from the room broadcast and sent a copy with `replyTo.hidden: true` on `user:{id}`; the same applies to `message:updated` |
 | `message:updated` | `Message` | `conversation:{id}` |
 | `message:deleted` | `{ conversationId, messageId, deletedAt }` | `conversation:{id}` |
 | `message:reaction` | `{ conversationId, messageId, reactions }` | `conversation:{id}` |
 | `receipt:update` | `{ conversationId, messageIds, userId, status: "delivered" \| "read", at }` | `user:{senderId}` for each affected sender |
 | `conversation:new` | `Conversation` | `user:{id}` of each member |
-| `conversation:updated` | `Conversation` | `conversation:{id}` |
+| `conversation:updated` | `{ id, type, name, avatarUrl, members }`: shared fields only; never the editor's role, unread count, mute state or preview | `conversation:{id}` |
 | `conversation:removed` | `{ conversationId }` | `user:{id}` of a removed or leaving member |
 | `member:added` / `member:removed` / `member:role` | `{ conversationId, member }` / `{ conversationId, userId }` / `{ conversationId, userId, role }` | `conversation:{id}` |
 | `typing:update` | `{ conversationId, userId, isTyping }` | `conversation:{id}` except the typist |

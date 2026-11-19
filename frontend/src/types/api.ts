@@ -74,6 +74,8 @@ export type Message = {
     senderId: string;
     content: string;
     deleted: boolean;
+    /** The quoted message predates the viewer joining, so the server withheld it. */
+    hidden?: boolean;
   } | null;
   attachments: Attachment[];
   reactions: { emoji: string; userIds: string[] }[];

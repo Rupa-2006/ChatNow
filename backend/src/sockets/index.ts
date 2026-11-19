@@ -472,7 +472,15 @@ export async function attachSocketServer(
       const durationMs = Date.now() - data.connectedAt;
       logger.info({ event: 'socket.disconnected', userId, socketId: socket.id, reason, durationMs });
 
-      const { remaining } = await unregisterSocketPresence(userId, socket.id);
+      let remaining: number;
+      try {
+        ({ remaining } = await unregisterSocketPresence(userId, socket.id));
+      } catch (err) {
+        // Typically Redis already closing during shutdown. The presence key has a TTL,
+        // so a missed removal expires on its own; never leave the rejection unhandled.
+        logger.warn({ event: 'presence.unregister_failed', userId, reason: (err as Error).message });
+        return;
+      }
       if (remaining > 0) return;
 
       // 5s grace period prevents page reloads from flickering offline

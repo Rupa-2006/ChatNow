@@ -183,7 +183,7 @@ export async function getAuthorizedAttachment(
     where: { id: attachmentId },
     include: {
       message: {
-        select: { conversationId: true, deletedAt: true },
+        select: { conversationId: true, deletedAt: true, createdAt: true },
       },
     },
   });
@@ -194,9 +194,10 @@ export async function getAuthorizedAttachment(
     if (row.message.deletedAt) throw notFound('Attachment');
     const membership = await prisma.conversationMember.findFirst({
       where: { conversationId: row.message.conversationId, userId, leftAt: null },
-      select: { id: true },
+      select: { joinedAt: true },
     });
-    if (!membership) throw notFound('Attachment');
+    // Members can only download files shared during their current membership.
+    if (!membership || row.message.createdAt < membership.joinedAt) throw notFound('Attachment');
   } else if (row.uploaderId !== userId) {
     throw notFound('Attachment');
   }
