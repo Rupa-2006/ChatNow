@@ -134,7 +134,13 @@ Invoke-RestMethod http://localhost:4002/api/health
 Invoke-RestMethod http://localhost:8080/api/health
 ```
 
-Import Kibana dashboards: open `http://localhost:5601` → **Stack Management → Saved Objects → Import** → select `infrastructure\elk\kibana\chatnow-saved-objects.ndjson`.
+Import the Kibana saved searches (once Kibana reports ready, about a minute after start), either through **Stack Management → Saved Objects → Import** with `infrastructure\elk\kibana\chatnow-saved-objects.ndjson`, or from the repository root:
+
+```powershell
+curl.exe -X POST "http://localhost:5601/api/saved_objects/_import?overwrite=true" -H "kbn-xsrf: true" --form file=@infrastructure/elk/kibana/chatnow-saved-objects.ndjson
+```
+
+Logs appear in Kibana only for events that happen after Logstash is running; the API reconnects to Logstash on its own every 5 seconds. Kibana usage telemetry is disabled in `docker-compose.yml`.
 
 ---
 
@@ -170,18 +176,25 @@ Follow this script for portfolio demos or interviews:
 2. **Auth & Security Proof**: Open DevTools → Application → confirm **Cookies** holds `chatnow_rt` (`HttpOnly`) and **Local Storage** contains zero JWT tokens. Reload both windows — both stay signed in seamlessly.
 3. **Instant Chat, Typing & Receipts**: Start typing as Alice to show Bob's live typing indicator; send a message and watch ticks advance `✓ (sent) → ✓✓ (delivered) → blue ✓✓ (read)`. Reply, react with emojis, edit within 15 minutes, attach an image, and reload to prove PostgreSQL persistence.
 4. **Group RBAC**: Create a group with Alice, Bob, and Carol. Show Bob (MEMBER) cannot rename or remove members; promote Bob to ADMIN as Alice (OWNER); leave as Alice and verify ownership transfers automatically to Bob.
-5. **Multi-Instance Redis Proof**: Run `npm run test:integration` in `backend/` to demonstrate `multi-instance.test.ts` delivering messages from `api-1` to `api-2` via Redis Pub/Sub (and failing when the adapter is disabled).
+5. **Multi-Instance Redis Proof**: With `--profile full` running, open Alice at `http://localhost:8080` and Bob at `http://127.0.0.1:8080` (different host names keep their login cookies separate). Check which server each landed on with `docker logs chatnow-api-1-1 | findstr socket.connected` (and the same for `api-2-1`); when they are on different instances, every message and receipt between them has crossed Redis. Then `docker stop chatnow-api-1-1` mid-conversation: the client reconnects to `api-2` and chat continues. `npm run test:integration` in `backend/` proves the same automatically, including that delivery fails when the Redis adapter is disabled.
 6. **ELK Log Inspection**: Open Kibana (`http://localhost:5601`) and open the **ChatNow - Authentication Events**, **WebSocket Events**, and **Message Delivery Events** saved searches — demonstrating full traceability with `[REDACTED]` sensitive fields and zero logged message content.
 
 ---
 
 ## Project Verification Status
 
-| Criterion | Code & Automated Tests | Verification State |
-|---|---|---|
-| Backend typecheck, build & unit/security tests (107 tests) | Complete | **Verified passing** |
-| Frontend typecheck, production build & component tests (14 tests) | Complete | **Verified passing** |
-| Docker Compose full + ELK config validation | Complete | **Verified passing (`config --quiet` exit 0)** |
-| Live DB migrations, auth/user/messaging/security/multi-instance integration tests | Complete | **Ready — start Docker Desktop and run `npm run test:integration`** |
-| Multi-user Playwright E2E & Kibana live log inspection | Complete | **Ready — start Docker Desktop (`--profile full --profile elk`)** |
-| Cloud production deployment | Blueprints (`render.yaml`, `vercel.json`, `docs/07-deployment.md`) complete | **Ready to connect to Render / Vercel / Neon / Upstash** |
+Last verified 2026-11-19 on Windows 11 with Docker Desktop (WSL 2).
+
+| Criterion | Verification State |
+|---|---|
+| Backend: 107 unit + 46 integration tests against real PostgreSQL 17 and Redis 7 | **Passing (153/153)** |
+| Frontend: typecheck, production build, 14 component tests | **Passing** |
+| Prisma migration on a real database, no schema drift | **Verified** |
+| Two users in a browser: register, login, instant messages, typing, online / last seen, delivered → read ticks, history after reload, mobile layout | **Verified manually** |
+| Full stack `--profile full`: migrate job, `api-1`, `api-2`, frontend and Nginx all healthy | **Verified** |
+| Cross-server chat through Nginx: Alice's socket on `api-1`, Bob's on `api-2`; messages and read receipts cross via Redis | **Verified manually** (and by `multi-instance.test.ts`) |
+| Failover: `api-1` stopped mid-chat, Alice's client reconnected to `api-2` automatically and messaging continued | **Verified manually** |
+| ELK: logs from both instances in Elasticsearch; Kibana saved searches import and display; canary passwords, cookies, tokens and message text absent from every stored log | **Verified** |
+| Group chats, file uploads, reactions, edit/delete in the browser | Covered by integration tests; **not yet exercised manually** |
+| Playwright end-to-end suite (`npm run test:e2e`) | **Not yet run** |
+| Cloud production deployment | Blueprints written (`render.yaml`, `vercel.json`, `docs/07-deployment.md`); **not yet deployed** |
