@@ -3,7 +3,12 @@ import { env } from '../config/env.js';
 import { prisma } from '../config/prisma.js';
 import { redis } from '../config/redis.js';
 
-const TIMEOUT_MS = 2000;
+// How long each dependency may take to answer. The first database query after a few
+// idle minutes can take about 2 s through Docker Desktop's port forwarding on Windows
+// (measured 2.06 s), which a 2 s limit misreported as "database down" although every
+// real request succeeded. 4 s tolerates that and stays under the Docker HEALTHCHECK's
+// own 5 s timeout, so a genuinely unreachable database is still reported.
+const TIMEOUT_MS = 4000;
 
 async function check(probe: () => Promise<unknown>): Promise<'up' | 'down'> {
   let timer: NodeJS.Timeout | undefined;
