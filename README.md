@@ -71,12 +71,13 @@ flowchart LR
 | Document | Contents |
 |---|---|
 | [docs/01-architecture.md](docs/01-architecture.md) | System overview, multi-server Redis Pub/Sub sequence diagram, design decisions, repository layout |
-| [docs/02-database.md](docs/02-database.md) | 11-model PostgreSQL ER diagram, indexes, cascade rules, keyset pagination |
+| [docs/02-database.md](docs/02-database.md) | 12-model PostgreSQL ER diagram, indexes, cascade rules, keyset pagination |
 | [docs/03-rest-api.md](docs/03-rest-api.md) | Complete REST API contract, DTOs, error envelope, rate limits, group RBAC matrix |
 | [docs/04-socket-events.md](docs/04-socket-events.md) | Socket.IO handshake, client/server event contracts, tick lifecycle, presence & reconnection |
 | [docs/05-security.md](docs/05-security.md) | All 18 cybersecurity controls mapped to code, Phase 6 audit findings & fixes |
 | [docs/06-testing.md](docs/06-testing.md) | Unit, integration, multi-instance Redis, security & Playwright E2E test matrix & results |
-| [docs/07-deployment.md](docs/07-deployment.md) | Free-tier cloud deployment (Vercel + Render + Neon + Upstash) & self-hosted Docker TLS guide |
+| [docs/07-deployment.md](docs/07-deployment.md) | Free-tier cloud deployment (single-origin Render + Neon + Upstash) & self-hosted Docker TLS guide |
+| [report/ChatNow_Mini_Project_Report.pdf](report/ChatNow_Mini_Project_Report.pdf) | Mini project report (18 pages): objectives, design, implementation, screenshots, test results, PO/PSO mapping ([Word version](report/ChatNow_Mini_Project_Report.docx)) |
 
 ---
 
