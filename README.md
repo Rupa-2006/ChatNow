@@ -171,15 +171,15 @@ Logs appear in Kibana only for events that happen after Logstash is running; the
 ## Running Tests
 
 ```powershell
-# Backend unit & security tests (no Docker needed — 107 tests)
+# Backend unit & security tests (no Docker needed — 115 tests)
 cd c:\Projects\Chatbot\backend
 npm run typecheck
 npm test
 
-# Backend integration, Socket.IO, multi-instance Redis & security tests (needs Postgres + Redis)
+# Backend integration, Socket.IO, multi-instance Redis & security tests (needs Postgres + Redis — 59 tests)
 npm run test:integration
 
-# Frontend unit & component tests (no Docker needed — 14 tests)
+# Frontend unit & component tests (no Docker needed — 22 tests)
 cd c:\Projects\Chatbot\frontend
 npm run typecheck
 npm test
@@ -207,11 +207,11 @@ Follow this script for portfolio demos or interviews:
 
 ## Project Verification Status
 
-Last verified 2026-11-19 on Windows 11 with Docker Desktop (WSL 2).
+Last verified 2026-11-20 on Windows 11 with Docker Desktop (WSL 2), and on every push by GitHub Actions.
 
 | Criterion | Verification State |
 |---|---|
-| Backend: 107 unit + 46 integration tests against real PostgreSQL 17 and Redis 7 | **Passing (153/153)** |
+| Backend: 115 unit + 59 integration tests against real PostgreSQL 17 and Redis 7 | **Passing (174/174)** |
 | Frontend: typecheck, production build, 22 tests (components, auth flow, token renewal, confirmation dialog) | **Passing** |
 | Prisma migration on a real database, no schema drift | **Verified** |
 | Two users in a browser: register, login, instant messages, typing, online / last seen, delivered → read ticks, history after reload, mobile layout | **Verified manually** |
@@ -224,5 +224,6 @@ Last verified 2026-11-19 on Windows 11 with Docker Desktop (WSL 2).
 | Reactions (add / remove), replies, edit within 15 minutes ("edited" label), delete with confirmation (text wiped in the database) | **Verified manually** |
 | History visibility: members added or re-added to a group see only messages sent after they joined, across history, search, reply quotes, files, previews, unread counts and live events | **Verified** (8 integration tests + browser) |
 | Session kept alive past the 15-minute access-token lifetime; signing out one tab leaves the user's other sessions signed in | **Verified** (unit tests + audit log) |
-| Playwright end-to-end suite (`npm run test:e2e`) | **Not yet run** |
+| Playwright end-to-end journey (`npm run test:e2e`) in a real browser against the built app | **Passing** (GitHub Actions, every push) |
+| Continuous integration (`.github/workflows/ci.yml`): backend, frontend and end-to-end jobs | **Passing** on `main` |
 | Production configuration (`render.yaml`): single-origin Render service + Neon + Upstash, uploads in PostgreSQL | Render's exact build and start commands run locally against an empty database: migrations applied, site served under its CSP with no violations, sign-up, WebSocket, reload persistence and database-stored uploads **verified**; **not yet deployed** |

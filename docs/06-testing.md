@@ -20,21 +20,24 @@ ChatNow is tested across four layers: fast isolated unit tests, real PostgreSQL 
 
 ---
 
-## 2. Recorded Verification Results (2026-11-18)
+## 2. Recorded Verification Results (2026-11-20)
 
-### Executed & Passing (No Docker Required)
+All suites below were run locally against Docker PostgreSQL 17 and Redis 7, and the same
+jobs run automatically on every push in GitHub Actions (`.github/workflows/ci.yml`).
 
 | Command | Result |
 |---|---|
 | `backend`: `npm run typecheck` (`tsc --noEmit`) | **Passed** (0 errors) |
 | `backend`: `npm run build` (`tsc -p tsconfig.build.json`) | **Passed** (0 errors) |
-| `backend`: `npm test` (8 unit test files) | **107 / 107 passed** |
+| `backend`: `npm test` (9 unit test files) | **115 / 115 passed** |
+| `backend`: `npm run test:integration` (7 files: auth, users, messaging, security, multi-instance Redis, history visibility, storage and presence) | **59 / 59 passed** |
 | `frontend`: `npm run typecheck` (`tsc -b --noEmit`) | **Passed** (0 errors) |
 | `frontend`: `npm run build` (Vite 8 production bundle) | **Passed** (0 errors) |
-| `frontend`: `npm test` (5 component/store test files) | **14 / 14 passed** |
+| `frontend`: `npm test` (6 component/store test files) | **22 / 22 passed** |
+| `frontend`: `npm run test:e2e` (Playwright, real browser, built app) | **Passed** in GitHub Actions |
 | Root: `docker compose --profile full --profile elk config --quiet` | **Passed** (exit 0) |
 
-### Live-Infrastructure Suites (Run Once Docker Desktop Is Started)
+### Running the live-infrastructure suites yourself
 
 ```powershell
 # 1. Start PostgreSQL (5434) and Redis (6379)

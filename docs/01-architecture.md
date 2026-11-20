@@ -198,15 +198,19 @@ Each phase ends with a verification gate. A phase is not closed until its gate p
 | **6. Security and testing** | Authorization-boundary tests, socket-event abuse tests, concurrency tests, upload tests, Playwright journeys, dependency audit, security document | Full test suite green; results recorded in `docs/` |
 | **7. Deployment** | Production builds, migration-on-deploy, HTTPS/WSS, deployment guide, README with screenshots | Deployed instance passes the success-criteria checklist |
 
-### Deployment targets (decided in Phase 7, listed now so nothing is a surprise)
+### Deployment targets (decided in Phase 7)
 
-| Need | Free-tier option | Limits to know about |
+The Phase 1 plan put the frontend on a separate static host (Vercel, Netlify or
+Cloudflare Pages). Phase 7 replaced that with **one Render service that serves the React
+app, the REST API and Socket.IO from a single origin**: on two domains the refresh cookie
+would be a third-party cookie, which Safari, Firefox and Brave block, signing users out
+on every reload. Details and current limits: [07-deployment.md](07-deployment.md).
+
+| Need | Free-tier option | Limits to know about (checked 2026-11-19) |
 |---|---|---|
-| Frontend | Vercel, Netlify or Cloudflare Pages | Generous; static hosting only |
-| Backend (WebSockets) | Render free web service | Sleeps after ~15 min idle (cold start ≈ 1 min); a single free instance, so the multi-instance demo stays local/Docker |
-| PostgreSQL | Neon free plan | Storage and compute-hour caps; scales to zero when idle |
-| Redis | Upstash free plan | Daily command cap; Pub/Sub traffic counts toward it |
+| App (website + API + WebSockets) | One Render free web service | Sleeps after 15 min idle (about 1 min to wake); filesystem wiped on restart, so uploads are stored in PostgreSQL; one instance, so the multi-instance demo stays in Docker |
+| PostgreSQL | Neon free plan | 1 GB storage, 100 compute-hours per month; scales to zero when idle |
+| Redis | Upstash free plan | 500K commands per month; presence heartbeat trimmed to 1 command per tab per minute |
 | ELK | **None suitable** | Elasticsearch needs ≥ 1–2 GB RAM. Elastic Cloud is a 14-day trial, then paid. ELK is demonstrated locally in Docker; production uses the host's log stream. |
 
-Free-tier terms change; they are re-checked against the providers' current pricing pages
-in Phase 7 before anything is recommended as final.
+Free-tier terms change; re-check the providers' current pricing pages before relying on them.
