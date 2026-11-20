@@ -12,3 +12,9 @@
 *.ico binary
 *.woff binary
 *.woff2 binary
+# Documents and archives: Git's automatic text detection must never rewrite their bytes.
+*.pdf binary
+*.docx binary
+*.xlsx binary
+*.pptx binary
+*.zip binary
