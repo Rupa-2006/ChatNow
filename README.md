@@ -6,6 +6,29 @@ A production-grade, distributed real-time messaging platform built with **React 
 
 ---
 
+## Quick start (Windows)
+
+Needs [Node.js](https://nodejs.org) (LTS) and [Docker Desktop](https://www.docker.com/products/docker-desktop/).
+
+| To | Do |
+|---|---|
+| **Start ChatNow** | Double-click **`start.bat`**, then wait until the browser opens at `http://localhost:5174` (about 15 seconds; the very first run also installs packages). |
+| **Stop ChatNow** | Double-click **`stop.bat`** (the database keeps running in Docker with your data; `stop.bat all` stops it too). |
+| **Chat as two people** | Open a second window with **Ctrl + Shift + N** (Incognito) at the same address. |
+
+`start.bat` checks everything before starting and is safe to run again at any time:
+it starts Docker Desktop if needed, creates the `.env` files with random secrets on the
+first run, starts PostgreSQL and Redis, installs packages if missing, updates the
+database tables, replaces any ChatNow servers already running, starts the backend and
+website in two minimized windows, and opens the browser only once both answer. If a
+step fails, it says which one and how to fix it. (The logic is in
+[scripts/start.ps1](scripts/start.ps1).)
+
+For the two-server setup behind Nginx, see
+[Running the full stack](#prerequisites--local-setup-windows-11-powershell).
+
+---
+
 ## Architecture Overview
 
 ```mermaid
